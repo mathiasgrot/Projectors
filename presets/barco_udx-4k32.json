@@ -1,0 +1,38 @@
+{
+  "name": "Barco UDX-4K32",
+  "lumens": 29000,
+  "lumens_note": "ANSI lumens in 4K UHD mode (30,000 in WQ mode)",
+  "resolution": [
+    3840,
+    2400
+  ],
+  "body": {
+    "width": 0.66,
+    "height": 0.35,
+    "depth": 0.83
+  },
+  "lenses": [
+    {
+      "name": "TLD+ 0.65-0.85 UST 90° (R9862001)",
+      "throw": [
+        0.71,
+        0.93
+      ],
+      "note": "Sold as 0.65-0.85, but that range is for WUXGA. Barco lists 0.71-0.93 for WQ/4K UHD. The beam leaves at 90° to the body. Lens shift: use Barco's lens calculator."
+    },
+    {
+      "name": "TLD+ 1.49-2.03 (WQ/4K UHD)",
+      "throw": [
+        1.49,
+        2.03
+      ],
+      "note": "Listed by Barco as 1.39-1.89 for WU/HD and 1.49-2.03 for WQ/4K UHD. Lens shift: use Barco's lens calculator."
+    }
+  ],
+  "note": "Lens shift on the UDX depends on the lens (vertical -100% to +130%, horizontal up to ±40%), so no shift limits are set.",
+  "sources": [
+    "https://www.barco.com/en/product/udx-4k32",
+    "https://www.barco.com/en/product/tld-plus-068---087",
+    "https://www.projectorcentral.com/barco-udx-4k32.htm"
+  ]
+}

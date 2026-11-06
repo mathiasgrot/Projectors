@@ -1,0 +1,30 @@
+{
+  "name": "Panasonic PT-VMZ60",
+  "lumens": 6000,
+  "resolution": [
+    1920,
+    1200
+  ],
+  "lenses": [
+    {
+      "name": "Built-in 1.6x zoom",
+      "throw": [
+        1.09,
+        1.77
+      ],
+      "v_shift": [
+        0,
+        44
+      ],
+      "h_shift": [
+        -20,
+        20
+      ]
+    }
+  ],
+  "note": "Vertical shift only goes up (0 to +44%). Housing size not verified, so the body isn't changed.",
+  "sources": [
+    "https://www.rentex.com/rental-products/panasonic-pt-vmz60b/",
+    "https://www.fullcompass.com/common/files/38019-PTVMZ60SeriesLeaflet.pdf"
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "name": "Panasonic PT-RQ35K",
+  "lumens": 30000,
+  "lumens_note": "30,000 lm (31,000 center) per the launch brochure",
+  "resolution": [
+    3840,
+    2400
+  ],
+  "body": {
+    "width": 0.598,
+    "height": 0.353,
+    "depth": 0.78
+  },
+  "lenses": [
+    {
+      "name": "ET-D3LEW200 short throw zoom",
+      "throw": [
+        0.645,
+        0.85
+      ],
+      "v_shift": [
+        -48,
+        48
+      ],
+      "h_shift": [
+        -15,
+        15
+      ]
+    },
+    {
+      "name": "ET-D75LE6 zoom",
+      "throw": [
+        0.924,
+        1.1
+      ],
+      "v_shift": [
+        -44,
+        44
+      ],
+      "h_shift": [
+        -15,
+        15
+      ]
+    },
+    {
+      "name": "ET-D75LE20 / ET-D3LES20 zoom",
+      "throw": [
+        1.67,
+        2.41
+      ],
+      "v_shift": [
+        -55,
+        55
+      ],
+      "h_shift": [
+        -20,
+        20
+      ]
+    }
+  ],
+  "note": "Lens shift is measured from the centre of the screen, like in this addon.",
+  "sources": [
+    "https://www.projectorcentral.com/Panasonic-PT-RQ35K.htm",
+    "https://images.visunextgroup.com/documents/manufacturer-1000016719-pdf-1-en-datasheet.pdf"
+  ]
+}

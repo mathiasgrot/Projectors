@@ -4,11 +4,12 @@ import os
 
 from enum import Enum
 import bpy
+import mathutils
 from bpy.types import Operator
 
 from .helper import (ADDON_ID, auto_offset,
                      get_projectors, get_projector, get_spot, random_color)
-from . import eevee, shadows, body, duplicate, cleanup
+from . import eevee, shadows, body, duplicate, cleanup, presets
 
 logging.basicConfig(
     format='[Projectors Addon]: %(name)s - %(levelname)s - %(message)s')
@@ -26,6 +27,8 @@ RESOLUTIONS = [
     ('1280x800', 'WXGA (1280x800) 16:10', '', 1),
     ('1440x900', 'WXGA+ (1440x900) 16:10', '', 2),
     ('1920x1200', 'WUXGA (1920x1200) 16:10', '', 3),
+    ('2560x1600', 'WQXGA (2560x1600) 16:10', '', 13),
+    ('3840x2400', 'WQUXGA (3840x2400) 16:10', '', 14),
     # 16:9 aspect ratio
     ('1280x720', '720p (1280x720) 16:9', '', 4),
     ('1920x1080', '1080p (1920x1080) 16:9', '', 5),
@@ -38,7 +41,9 @@ RESOLUTIONS = [
     # 17:9 aspect ratio
     ('4096x2160', 'Native 4K (4096x2160) 17:9', '', 11),
     # 1:1 aspect ratio
-    ('1000x1000', 'Square (1000x1000) 1:1', '', 12)
+    ('1000x1000', 'Square (1000x1000) 1:1', '', 12),
+    # Any size
+    ('custom', 'Custom', 'Set your own width and height', 99),
 ]
 
 PROJECTED_OUTPUTS = [(Textures.CHECKER.value, 'Checker', '', 1),
@@ -67,16 +72,23 @@ class PROJECTOR_OT_change_color_randomly(Operator):
 
 def create_projector_textures():
     """ This function checks if the needed images exist and if not creates them. """
-    name_template = '_proj.tex.{}'
     for res in RESOLUTIONS:
-        img_name = name_template.format(res[0])
+        if res[0] == 'custom':
+            continue
         w, h = res[0].split('x')
-        if not bpy.data.images.get(img_name):
-            log.debug(f'Create projection texture: {res}')
-            img = bpy.data.images.new(img_name, int(w), int(h), alpha=True)
-            img.generated_type = 'COLOR_GRID'
+        ensure_resolution_texture(int(w), int(h))
 
-        bpy.data.images[img_name].use_fake_user = True
+
+def ensure_resolution_texture(w, h):
+    """ The colour grid image for one resolution, created on demand. """
+    img_name = f'_proj.tex.{int(w)}x{int(h)}'
+    img = bpy.data.images.get(img_name)
+    if img is None:
+        log.debug(f'Create projection texture: {img_name}')
+        img = bpy.data.images.new(img_name, int(w), int(h), alpha=True)
+        img.generated_type = 'COLOR_GRID'
+    img.use_fake_user = True
+    return img
 
 
 def add_projector_node_tree_to_spot(spot):
@@ -259,8 +271,55 @@ def get_resolution_for(projector):
         if image and image.size[0] and image.size[1]:
             return float(image.size[0]), float(image.size[1])
         return 300.0, 300.0
+    return get_preset_resolution(settings)
+
+
+def get_preset_resolution(settings):
+    """ The chosen resolution, ignoring the custom texture. """
+    if settings.resolution == 'custom':
+        w, h = settings.custom_resolution
+        return float(max(1, w)), float(max(1, h))
     w, h = settings.resolution.split('x')
     return float(w), float(h)
+
+
+def _aspect(settings):
+    w, h = get_resolution_for(settings.id_data)
+    return w / h if h else 1.0
+
+
+def get_image_width(self):
+    return self.plan_distance / max(self.throw_ratio, 1e-6)
+
+
+def set_image_width(self, value):
+    value = max(value, 1e-4)
+    if self.plan_solve == 'THROW':
+        self.throw_ratio = self.plan_distance / value
+    else:
+        self.plan_distance = self.throw_ratio * value
+
+
+def get_image_height(self):
+    return get_image_width(self) / _aspect(self)
+
+
+def set_image_height(self, value):
+    set_image_width(self, value * _aspect(self))
+
+
+def get_image_diagonal(self):
+    a = _aspect(self)
+    return get_image_width(self) * math.sqrt(1 + 1 / (a * a))
+
+
+def set_image_diagonal(self, value):
+    a = _aspect(self)
+    set_image_width(self, value / math.sqrt(1 + 1 / (a * a)))
+
+
+def update_limits(proj_settings, context):
+    update_throw_ratio(proj_settings, context)
 
 
 def update_eevee_shadows(proj_settings, context):
@@ -286,8 +345,15 @@ def update_throw_ratio(proj_settings, context):
     Adjust some settings on a camera to achieve a throw ratio
     """
     projector = proj_settings.id_data
+    # Keep the throw ratio inside the lens range, if the lens has one.
+    throw_ratio = proj_settings.get('throw_ratio', proj_settings.throw_ratio)
+    if proj_settings.limit_throw:
+        lo, hi = sorted(proj_settings.throw_limits)
+        clamped = min(max(throw_ratio, lo), hi)
+        if clamped != throw_ratio:
+            proj_settings['throw_ratio'] = clamped
+            throw_ratio = clamped
     # Update properties of the camera.
-    throw_ratio = proj_settings.get('throw_ratio')
     distance = 1
     alpha = math.atan((distance/throw_ratio)*.5) * 2
     projector.data.lens_unit = 'FOV'
@@ -326,9 +392,16 @@ def update_lens_shift(proj_settings, context):
     Apply the shift to the camera and texture.
     """
     projector = proj_settings.id_data
+    if proj_settings.limit_shift:
+        for key, limits in (('h_shift', proj_settings.h_shift_limits),
+                            ('v_shift', proj_settings.v_shift_limits)):
+            lo, hi = sorted(limits)
+            value = proj_settings.get(key, 0.0)
+            if not lo <= value <= hi:
+                proj_settings[key] = min(max(value, lo), hi)
     h_shift = proj_settings.get('h_shift', 0.0) / 100
     v_shift = proj_settings.get('v_shift', 0.0) / 100
-    throw_ratio = proj_settings.get('throw_ratio')
+    throw_ratio = proj_settings.get('throw_ratio', proj_settings.throw_ratio)
 
     w, h = get_resolution(proj_settings, context)
     inverted_aspect_ratio = h/w
@@ -354,7 +427,8 @@ def update_resolution(proj_settings, context):
     projector = proj_settings.id_data
     nodes = get_spot(projector).data.node_tree.nodes['Group'].node_tree.nodes
     # Change resolution image texture
-    nodes['Image Texture'].image = bpy.data.images[f'_proj.tex.{proj_settings.resolution}']
+    w, h = get_preset_resolution(proj_settings)
+    nodes['Image Texture'].image = ensure_resolution_texture(w, h)
     update_throw_ratio(proj_settings, context)
     update_pixel_grid(proj_settings, context)
 
@@ -385,7 +459,66 @@ def update_pixel_grid(proj_settings, context):
         root_tree.links.new(nodes['pixel_grid'].outputs[0], nodes['Light Output'].inputs[0])
     else:
         root_tree.links.new(nodes['Emission'].outputs[0], nodes['Light Output'].inputs[0])
-    eevee.sync(proj_settings.id_data)
+
+    # Pixelated preview: sample the content once per projector pixel.
+    ensure_pixelate_nodes(root_tree)
+    nodes['pix_res'].inputs[0].default_value = width
+    nodes['pix_res'].inputs[1].default_value = height
+    nodes['pix_mix'].inputs[0].default_value = 1.0 if proj_settings.show_pixel_grid else 0.0
+    group_nodes = nodes['Group'].node_tree.nodes
+    group_nodes['Image Texture'].interpolation = 'Closest' if proj_settings.show_pixel_grid else 'Linear'
+
+    projector = proj_settings.id_data
+    if proj_settings.eevee_node_group is not None:
+        eevee.ensure_eevee_node_group(projector)   # upgrades older EEVEE setups
+    eevee.sync(projector)
+
+
+def ensure_pixelate_nodes(root_tree):
+    """ Insert the pixelate step between the projector coordinates and the custom
+    image in the light's node tree (older projectors don't have it). """
+    nodes = root_tree.nodes
+    if 'pix_mix' in nodes:
+        return
+    group = nodes['Group']
+    image = nodes['Image Texture']
+    uv = group.outputs['texture vector']
+    x, y = image.location[0] - 900, image.location[1] + 400
+
+    res = nodes.new('ShaderNodeCombineXYZ')
+    res.name = res.label = 'pix_res'
+    res.inputs[2].default_value = 1.0
+    res.location = (x, y - 150)
+    mul = nodes.new('ShaderNodeVectorMath')
+    mul.operation = 'MULTIPLY'
+    mul.location = (x + 180, y)
+    flo = nodes.new('ShaderNodeVectorMath')
+    flo.operation = 'FLOOR'
+    flo.location = (x + 360, y)
+    add = nodes.new('ShaderNodeVectorMath')
+    add.operation = 'ADD'
+    add.inputs[1].default_value = (0.5, 0.5, 0.0)
+    add.location = (x + 540, y)
+    div = nodes.new('ShaderNodeVectorMath')
+    div.operation = 'DIVIDE'
+    div.location = (x + 720, y)
+    mix = nodes.new('ShaderNodeMix')
+    mix.name = mix.label = 'pix_mix'
+    mix.data_type = 'VECTOR'
+    mix.inputs[0].default_value = 0.0
+    mix.location = (x + 900, y)
+
+    links = root_tree.links
+    links.new(uv, mul.inputs[0])
+    links.new(res.outputs[0], mul.inputs[1])
+    links.new(mul.outputs[0], flo.inputs[0])
+    links.new(flo.outputs[0], add.inputs[0])
+    links.new(add.outputs[0], div.inputs[0])
+    links.new(res.outputs[0], div.inputs[1])
+    # Mix node: A (index 4) = original, B (index 5) = pixelated, for vectors.
+    links.new(uv, mix.inputs[4])
+    links.new(div.outputs[0], mix.inputs[5])
+    links.new(mix.outputs[1], image.inputs['Vector'])
 
     
 def create_pixel_grid_node_group():
@@ -765,6 +898,32 @@ class ProjectorReceiver(bpy.types.PropertyGroup):
     material: bpy.props.PointerProperty(type=bpy.types.Material)
 
 
+class PROJECTOR_OT_measure_distance(Operator):
+    """Measure the throw distance: from the lens along its axis to the first surface it hits"""
+    bl_idname = 'projector.measure_distance'
+    bl_label = 'Measure Throw Distance'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return get_projector(context) is not None
+
+    def execute(self, context):
+        projector = get_projector(context)
+        spot = get_spot(projector)
+        mw = (spot or projector).matrix_world
+        origin = mw.translation
+        direction = (mw.to_3x3().normalized() @ mathutils.Vector((0.0, 0.0, -1.0))).normalized()
+        depsgraph = context.evaluated_depsgraph_get()
+        hit, loc, _n, _i, obj, _m = context.scene.ray_cast(depsgraph, origin, direction)
+        if not hit:
+            self.report({'WARNING'}, 'Nothing in front of the projector')
+            return {'CANCELLED'}
+        projector.proj_settings.plan_distance = (loc - origin).length
+        self.report({'INFO'}, f'{obj.name}: {(loc - origin).length:.3f} m')
+        return {'FINISHED'}
+
+
 class ProjectorSettings(bpy.types.PropertyGroup):
     throw_ratio: bpy.props.FloatProperty(
         name="Throw Ratio",
@@ -811,6 +970,70 @@ class ProjectorSettings(bpy.types.PropertyGroup):
         description="When checked the image is divided into a pixel grid with the dimensions of the image resolution.",
         default=False,
         update=update_pixel_grid)
+    custom_resolution: bpy.props.IntVectorProperty(
+        name="Custom Resolution",
+        description="Width and height in pixels, used when Resolution is Custom",
+        size=2, default=(1920, 1080), min=1, soft_max=8192,
+        update=update_resolution)
+
+    # Preset (model + lens)
+    preset_id: bpy.props.StringProperty()
+    preset_name: bpy.props.StringProperty(name="Model")
+    preset_lens: bpy.props.StringProperty(name="Lens")
+    lumens: bpy.props.FloatProperty(
+        name="Brightness",
+        description="Brightness of the projector in lumens. For information only: it doesn't change Power",
+        default=0.0, min=0.0, soft_max=60000, step=10000, precision=0)
+
+    # Lens limits
+    limit_throw: bpy.props.BoolProperty(
+        name="Limit Throw Ratio",
+        description="Keep the throw ratio inside the lens' zoom range",
+        default=False, update=update_limits)
+    throw_limits: bpy.props.FloatVectorProperty(
+        name="Throw Ratio Range",
+        description="Shortest and longest throw ratio of the lens (equal for a fixed lens)",
+        size=2, default=(0.8, 2.0), min=0.01, soft_max=15.0, precision=3,
+        update=update_limits)
+    limit_shift: bpy.props.BoolProperty(
+        name="Limit Lens Shift",
+        description="Keep the lens shift inside the lens' range",
+        default=False, update=update_lens_shift)
+    v_shift_limits: bpy.props.FloatVectorProperty(
+        name="Vertical Shift Range",
+        description="Lowest and highest vertical lens shift (% of image height from centred)",
+        size=2, default=(-50.0, 50.0), soft_min=-150, soft_max=150,
+        update=update_lens_shift)
+    h_shift_limits: bpy.props.FloatVectorProperty(
+        name="Horizontal Shift Range",
+        description="Lowest and highest horizontal lens shift (% of image width from centred)",
+        size=2, default=(-20.0, 20.0), soft_min=-150, soft_max=150,
+        update=update_lens_shift)
+
+    # Image size calculator
+    plan_distance: bpy.props.FloatProperty(
+        name="Throw Distance",
+        description="Distance from the lens to the surface, along the lens axis. Use Measure to get it from the scene",
+        default=3.0, min=0.01, soft_max=30.0, subtype='DISTANCE', unit='LENGTH')
+    plan_solve: bpy.props.EnumProperty(
+        name="When Changing the Image Size",
+        description="What to adjust when you type an image size",
+        items=[('THROW', 'Adjust Throw Ratio', 'Keep the distance, change the zoom'),
+               ('DISTANCE', 'Adjust Distance', 'Keep the zoom, change the distance')],
+        default='THROW')
+    image_width: bpy.props.FloatProperty(
+        name="Image Width", subtype='DISTANCE', unit='LENGTH', min=0.0, soft_max=20.0,
+        description="Width of the image at the throw distance",
+        get=get_image_width, set=set_image_width)
+    image_height: bpy.props.FloatProperty(
+        name="Image Height", subtype='DISTANCE', unit='LENGTH', min=0.0, soft_max=20.0,
+        description="Height of the image at the throw distance",
+        get=get_image_height, set=set_image_height)
+    image_diagonal: bpy.props.FloatProperty(
+        name="Image Diagonal", subtype='DISTANCE', unit='LENGTH', min=0.0, soft_max=25.0,
+        description="Diagonal of the image at the throw distance",
+        get=get_image_diagonal, set=set_image_diagonal)
+
     show_body: bpy.props.BoolProperty(
         name="Show Body",
         description="Add a box for the projector housing behind the lens. It renders and blocks other projectors' beams",
@@ -875,6 +1098,8 @@ def register():
     bpy.utils.register_class(PROJECTOR_OT_eevee_bake_shadows)
     bpy.utils.register_class(PROJECTOR_OT_duplicate_projector)
     bpy.utils.register_class(PROJECTOR_OT_reinit_projector)
+    bpy.utils.register_class(PROJECTOR_OT_measure_distance)
+    presets.register()
     bpy.types.Object.proj_settings = bpy.props.PointerProperty(
         type=ProjectorSettings)
     eevee.register()
@@ -885,6 +1110,8 @@ def unregister():
     duplicate.unregister()
     cleanup.unregister()
     body.unregister()
+    presets.unregister()
+    bpy.utils.unregister_class(PROJECTOR_OT_measure_distance)
     bpy.utils.unregister_class(PROJECTOR_OT_reinit_projector)
     bpy.utils.unregister_class(PROJECTOR_OT_duplicate_projector)
     bpy.utils.unregister_class(PROJECTOR_OT_eevee_bake_shadows)

@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "projector"
-version = "2026.11.12"
+version = "2026.11.13"
 name = "Projector"
 tagline = "Easy projector creation and modification, in Cycles and EEVEE"
 maintainer = "Jonas Schell"

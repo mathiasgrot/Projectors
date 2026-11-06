@@ -47,7 +47,7 @@ ROLE_SPLIT = 'split_original'   # original output that was switched to Cycles
 POWER_FACTOR = 1.0 / (4.0 * math.pi ** 2)
 
 GROUP_VERSION_KEY = 'projectors_eevee_version'
-GROUP_VERSION = 2
+GROUP_VERSION = 3
 
 RECEIVER_TYPES = {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT', 'CURVES'}
 
@@ -173,8 +173,33 @@ def create_eevee_node_group(projector):
     custom_img.extension = 'CLIP'
     custom_img.location = (tex_x, -300)
 
-    for n in (grid_img, checker, custom_img):
-        links.new(uv.outputs['Vector'], n.inputs['Vector'])
+    # Pixelated preview: images are sampled once per projector pixel when on.
+    pix_res = nodes.new('ShaderNodeCombineXYZ')
+    pix_res.name = pix_res.label = 'pix_res'
+    pix_res.inputs[2].default_value = 1.0
+    pix_res.location = (tex_x - 250, 600)
+    pix_mul = _vmath(nodes, 'MULTIPLY', loc=(tex_x - 250, 750))
+    pix_floor = _vmath(nodes, 'FLOOR', loc=(tex_x - 100, 750))
+    pix_add = _vmath(nodes, 'ADD', loc=(tex_x + 50, 750))
+    pix_add.inputs[1].default_value = (0.5, 0.5, 0.0)
+    pix_div = _vmath(nodes, 'DIVIDE', loc=(tex_x + 200, 750))
+    pix_mix = nodes.new('ShaderNodeMix')
+    pix_mix.name = pix_mix.label = 'pix_mix'
+    pix_mix.data_type = 'VECTOR'
+    pix_mix.inputs[0].default_value = 0.0
+    pix_mix.location = (tex_x + 350, 750)
+    links.new(uv.outputs['Vector'], pix_mul.inputs[0])
+    links.new(pix_res.outputs[0], pix_mul.inputs[1])
+    links.new(pix_mul.outputs[0], pix_floor.inputs[0])
+    links.new(pix_floor.outputs[0], pix_add.inputs[0])
+    links.new(pix_add.outputs[0], pix_div.inputs[0])
+    links.new(pix_res.outputs[0], pix_div.inputs[1])
+    links.new(uv.outputs['Vector'], pix_mix.inputs[4])
+    links.new(pix_div.outputs[0], pix_mix.inputs[5])
+
+    links.new(uv.outputs['Vector'], checker.inputs['Vector'])
+    for n in (grid_img, custom_img):
+        links.new(pix_mix.outputs[1], n.inputs['Vector'])
 
     tex_select = nodes.new('NodeReroute')
     tex_select.name = 'tex_select'
@@ -451,7 +476,9 @@ def sync(projector):
         src_custom = root.nodes['Image Texture']
         dst_custom = nodes['custom_img']
         _set(dst_custom, 'image', src_custom.image)
-        _set(dst_custom, 'interpolation', src_custom.interpolation)
+        # Pixelated preview: unfiltered sampling, or EEVEE's filtering blurs the cell edges.
+        _set(dst_custom, 'interpolation',
+             'Closest' if settings.show_pixel_grid else src_custom.interpolation)
         for attr in ('frame_duration', 'frame_start', 'frame_offset',
                      'use_cyclic', 'use_auto_refresh'):
             _set(dst_custom.image_user, attr, getattr(src_custom.image_user, attr))
@@ -469,6 +496,12 @@ def sync(projector):
         _set(nodes['grid_w'].outputs[0], 'default_value', pg['_width'].outputs[0].default_value)
         _set(nodes['grid_h'].outputs[0], 'default_value', pg['_height'].outputs[0].default_value)
         _set(nodes['grid_on'].outputs[0], 'default_value', 1.0 if settings.show_pixel_grid else 0.0)
+
+        if 'pix_mix' in nodes:
+            _set(nodes['pix_res'].inputs[0], 'default_value', pg['_width'].outputs[0].default_value)
+            _set(nodes['pix_res'].inputs[1], 'default_value', pg['_height'].outputs[0].default_value)
+            _set(nodes['pix_mix'].inputs[0], 'default_value', 1.0 if settings.show_pixel_grid else 0.0)
+            _set(nodes['grid_img'], 'interpolation', 'Closest' if settings.show_pixel_grid else 'Linear')
 
         if 'shadow_tex' in nodes:
             img = settings.shadow_image

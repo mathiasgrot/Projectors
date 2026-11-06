@@ -1,0 +1,35 @@
+{
+  "name": "Epson EB-PU2010",
+  "lumens": 10000,
+  "resolution": [
+    1920,
+    1200
+  ],
+  "body": {
+    "width": 0.545,
+    "height": 0.189,
+    "depth": 0.436
+  },
+  "lenses": [
+    {
+      "name": "ELPLM15 standard zoom",
+      "throw": [
+        1.57,
+        2.56
+      ],
+      "v_shift": [
+        -60,
+        60
+      ],
+      "h_shift": [
+        -18,
+        18
+      ]
+    }
+  ],
+  "note": "Takes other Epson lenses too; add them as your own presets.",
+  "sources": [
+    "https://files.support.epson.com/pdf/specs/specifications_ebpu2010series_en_r106.pdf",
+    "https://res.cloudinary.com/iwh/image/upload/q_auto,g_center/assets/1/26/EpsonV11HA52920-SpecSheet.pdf"
+  ]
+}
