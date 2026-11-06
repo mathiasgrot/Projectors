@@ -25,9 +25,9 @@ AUTO_DELAY = 0.4  # seconds without changes before an automatic re-bake
 
 
 def _projectors_with_shadows():
-    return [o for o in bpy.data.objects
-            if o.type == 'CAMERA' and o.name.startswith('Projector')
-            and o.proj_settings.eevee_node_group is not None
+    from . import registry
+    return [o for o in registry.projectors()
+            if o.proj_settings.eevee_node_group is not None
             and o.proj_settings.eevee_shadows]
 
 

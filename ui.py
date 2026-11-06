@@ -59,21 +59,24 @@ class PROJECTOR_PT_projector_settings(Panel):
                 if ps.lumens > 0:
                     note = preset.get('lumens_note')
                     box.label(text=f'{ps.lumens:,.0f} lm' + (f'  ({note})' if note else ''), icon='LIGHT_SUN')
+                notes = []
                 lens = presets.current_lens(projector)
                 if lens and lens.get('note'):
-                    _wrapped(box, lens['note'], icon='INFO')
+                    notes.append(lens['note'])
                 if preset.get('note'):
-                    _wrapped(box, preset['note'], icon='INFO')
+                    notes.append(preset['note'])
+                if notes:
+                    row = box.row()
+                    row.alignment = 'LEFT'
+                    row.prop(ps, 'show_preset_notes', text=f'Notes ({len(notes)})', emboss=False,
+                             icon='DOWNARROW_HLT' if ps.show_preset_notes else 'RIGHTARROW')
+                    if ps.show_preset_notes:
+                        for n in notes:
+                            _wrapped(box, n, icon='INFO')
 
             layout.label(text='Projector Settings:')
             box = layout.box()
-            col = box.column(align=True)
-            col.prop(ps, 'throw_ratio')
-            if ps.limit_throw:
-                lo, hi = sorted(ps.throw_limits)
-                col.label(text=f'Lens range {lo:g} – {hi:g}:1' if lo != hi else f'Fixed lens {lo:g}:1',
-                          icon='LOCKED')
-            box.prop(ps, 'power', text='Power')
+            # Resolution
             res_col = box.column(align=True)
             res_col.prop(ps, 'resolution', text='Resolution', icon='PRESET')
             if ps.resolution == 'custom':
@@ -81,14 +84,8 @@ class PROJECTOR_PT_projector_settings(Panel):
                 res_col.prop(ps, 'custom_resolution', index=1, text='Height')
             if ps.projected_texture == Textures.CUSTOM_TEXTURE.value and ps.use_custom_texture_res:
                 res_col.enabled = False
-            # Lens Shift
-            col = box.column(align=True)
-            col.prop(ps, 'h_shift', text='Horizontal Shift')
-            col.prop(ps, 'v_shift', text='Vertical Shift')
-            if ps.limit_shift:
-                hl, hh = sorted(ps.h_shift_limits)
-                vl, vh = sorted(ps.v_shift_limits)
-                col.label(text=f'Lens range H {hl:g} to {hh:g}%, V {vl:g} to {vh:g}%', icon='LOCKED')
+            # Power
+            box.prop(ps, 'power', text='Power')
             # Lens limits (filled in by the lens preset, editable)
             sub = box.column(heading='Lens Limits', align=True)
             sub.prop(ps, 'limit_throw', text='Throw Ratio')
@@ -104,6 +101,25 @@ class PROJECTOR_PT_projector_settings(Panel):
                 row = sub.row(align=True)
                 row.prop(ps, 'v_shift_limits', index=0, text='V Min')
                 row.prop(ps, 'v_shift_limits', index=1, text='Max')
+            box.separator()
+            # Throw ratio
+            col = box.column(align=True)
+            col.prop(ps, 'throw_ratio')
+            if ps.limit_throw:
+                lo, hi = sorted(ps.throw_limits)
+                if lo != hi:
+                    col.prop(ps, 'zoom', text='Zoom (Wide → Tele)', slider=True)
+                    col.label(text=f'Lens range {lo:g} – {hi:g}:1', icon='LOCKED')
+                else:
+                    col.label(text=f'Fixed lens {lo:g}:1', icon='LOCKED')
+            # Lens Shift
+            col = box.column(align=True)
+            col.prop(ps, 'h_shift', text='Horizontal Shift')
+            col.prop(ps, 'v_shift', text='Vertical Shift')
+            if ps.limit_shift:
+                hl, hh = sorted(ps.h_shift_limits)
+                vl, vh = sorted(ps.v_shift_limits)
+                col.label(text=f'Lens range H {hl:g} to {hh:g}%, V {vl:g} to {vh:g}%', icon='LOCKED')
             # Body
             box.prop(proj_settings, 'show_body')
             if proj_settings.show_body:

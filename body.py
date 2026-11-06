@@ -81,6 +81,8 @@ def create_body(projector):
     body.matrix_parent_inverse.identity()
     # Clicking the body selects the projector instead, see check_selection().
     body.hide_select = False
+    from . import registry
+    registry.invalidate()
     return body
 
 
@@ -126,8 +128,8 @@ _scheduled = False
 
 
 def _bodies():
-    return [o for o in bpy.data.objects
-            if o.type == 'MESH' and o.get(BODY_KEY) and o.parent is not None]
+    from . import registry
+    return [o for o in registry.bodies() if o.parent is not None]
 
 
 def check_selection(depsgraph=None):

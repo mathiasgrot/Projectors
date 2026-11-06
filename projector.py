@@ -318,6 +318,18 @@ def set_image_diagonal(self, value):
     set_image_width(self, value / math.sqrt(1 + 1 / (a * a)))
 
 
+def get_zoom(self):
+    lo, hi = sorted(self.throw_limits)
+    if hi - lo < 1e-6:
+        return 0.0
+    return (self.throw_ratio - lo) / (hi - lo) * 100.0
+
+
+def set_zoom(self, value):
+    lo, hi = sorted(self.throw_limits)
+    self.throw_ratio = lo + (hi - lo) * min(max(value, 0.0), 100.0) / 100.0
+
+
 def update_limits(proj_settings, context):
     update_throw_ratio(proj_settings, context)
 
@@ -927,7 +939,7 @@ class PROJECTOR_OT_measure_distance(Operator):
 class ProjectorSettings(bpy.types.PropertyGroup):
     throw_ratio: bpy.props.FloatProperty(
         name="Throw Ratio",
-        soft_min=0.4, soft_max=3,
+        soft_min=0.2, soft_max=10,
         update=update_throw_ratio,
         subtype='FACTOR')
     power: bpy.props.FloatProperty(
@@ -948,13 +960,13 @@ class ProjectorSettings(bpy.types.PropertyGroup):
     h_shift: bpy.props.FloatProperty(
         name="Horizontal Shift",
         description="Horizontal Lens Shift",
-        soft_min=-20, soft_max=20,
+        soft_min=-150, soft_max=150,
         update=update_lens_shift,
         subtype='PERCENTAGE')
     v_shift: bpy.props.FloatProperty(
         name="Vertical Shift",
         description="Vertical Lens Shift",
-        soft_min=-20, soft_max=20,
+        soft_min=-150, soft_max=150,
         update=update_lens_shift,
         subtype='PERCENTAGE')
     projected_color: bpy.props.FloatVectorProperty(
@@ -985,6 +997,9 @@ class ProjectorSettings(bpy.types.PropertyGroup):
         description="Brightness of the projector in lumens. For information only: it doesn't change Power",
         default=0.0, min=0.0, soft_max=60000, step=10000, precision=0)
 
+    show_preset_notes: bpy.props.BoolProperty(
+        name="Show Notes", description="Show the notes of this model and lens", default=False)
+
     # Lens limits
     limit_throw: bpy.props.BoolProperty(
         name="Limit Throw Ratio",
@@ -995,6 +1010,11 @@ class ProjectorSettings(bpy.types.PropertyGroup):
         description="Shortest and longest throw ratio of the lens (equal for a fixed lens)",
         size=2, default=(0.8, 2.0), min=0.01, soft_max=15.0, precision=3,
         update=update_limits)
+    zoom: bpy.props.FloatProperty(
+        name="Zoom",
+        description="Position on the lens' zoom range: 0% is wide (shortest throw, biggest image), 100% is tele",
+        subtype='PERCENTAGE', min=0.0, max=100.0,
+        get=get_zoom, set=set_zoom)
     limit_shift: bpy.props.BoolProperty(
         name="Limit Lens Shift",
         description="Keep the lens shift inside the lens' range",

@@ -45,6 +45,8 @@ def find_source(copy):
 
 def make_independent(copy, source=None):
     """ Turn a bare copy of a projector camera into a full projector. """
+    from . import registry
+    registry.invalidate()
     from .projector import create_spot, apply_settings
     ps = copy.proj_settings
     src_group = source.proj_settings.eevee_node_group if source else None
@@ -126,9 +128,8 @@ def check(depsgraph=None):
     """ Called from the depsgraph handler. Cheap: only looks at projector cameras. """
     global _repair_scheduled
     needs_repair = False
-    for obj in bpy.data.objects:
-        if not _is_projector_camera(obj):
-            continue
+    from . import registry
+    for obj in registry.projectors():
         spot = get_spot(obj)
         if spot is None:
             needs_repair = True
@@ -139,7 +140,7 @@ def check(depsgraph=None):
         tree = spot.data.node_tree
         node = tree.nodes.get('Image Texture') if tree else None
         if node is not None and node.image is not None and obj.proj_settings.custom_image != node.image:
-            obj.proj_settings.custom_image = node.image   # backup for Reinit
+            obj.proj_settings.custom_image = node.image   # backup for Reinit (no EEVEE setup)
     if needs_repair and not _repair_scheduled:
         _repair_scheduled = True
         # Deferred: Shift+D is still running its grab when the handler fires.
@@ -173,7 +174,8 @@ def reinit(projector):
     """ Rebuild the spot light, node trees, body and EEVEE setup of a projector
     from its settings. Keeps the custom image and the EEVEE receivers. """
     from .projector import create_spot, apply_settings
-    from . import cleanup
+    from . import cleanup, registry
+    registry.invalidate()
     ps = projector.proj_settings
 
     # Remember what to restore.

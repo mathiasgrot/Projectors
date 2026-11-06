@@ -29,7 +29,7 @@ import bpy
 from bpy.app.handlers import persistent
 
 from .helper import auto_offset
-from . import shadows
+from . import shadows, registry
 
 EEVEE_ENGINES = {'BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT'}
 
@@ -476,6 +476,8 @@ def sync(projector):
         src_custom = root.nodes['Image Texture']
         dst_custom = nodes['custom_img']
         _set(dst_custom, 'image', src_custom.image)
+        if src_custom.image is not None and settings.custom_image != src_custom.image:
+            settings.custom_image = src_custom.image   # backup for Reinit
         # Pixelated preview: unfiltered sampling, or EEVEE's filtering blurs the cell edges.
         _set(dst_custom, 'interpolation',
              'Closest' if settings.show_pixel_grid else src_custom.interpolation)
@@ -515,9 +517,24 @@ def sync(projector):
 
 
 def all_projectors():
-    return [o for o in bpy.data.objects
-            if o.type == 'CAMERA' and o.name.startswith('Projector')
-            and o.proj_settings.eevee_node_group is not None]
+    return [o for o in registry.projectors() if o.proj_settings.eevee_node_group is not None]
+
+
+def _watched(projector):
+    """ IDs whose changes can affect what sync() copies. """
+    ids = {projector}
+    spot = get_spot(projector)
+    if spot is not None:
+        ids.add(spot)
+        light = spot.data
+        ids.add(light)
+        tree = light.node_tree
+        if tree is not None:
+            ids.add(tree)
+            for n in tree.nodes:
+                if n.type == 'GROUP' and n.node_tree is not None:
+                    ids.add(n.node_tree)
+    return ids
 
 
 _syncing = False
@@ -531,11 +548,27 @@ def _on_depsgraph_update(scene, depsgraph=None):
     _syncing = True
     try:
         from . import duplicate, cleanup, body
-        duplicate.check(depsgraph)
-        cleanup.check(depsgraph)
+        structure_changed = registry.refresh()
+        if structure_changed or depsgraph is None:
+            # Objects were added or removed: look for copies and leftovers.
+            duplicate.check(depsgraph)
+            cleanup.check(depsgraph)
         body.check_selection(depsgraph)
+
+        updated = set()
+        image_changed = False
+        if depsgraph is not None:
+            for upd in depsgraph.updates:
+                try:
+                    updated.add(upd.id.original)
+                except (AttributeError, ReferenceError):
+                    pass
+            image_changed = depsgraph.id_type_updated('IMAGE')
         for projector in all_projectors():
-            sync(projector)
+            # Only re-read projectors that changed; moving other objects is free.
+            if structure_changed or depsgraph is None or image_changed \
+                    or not updated.isdisjoint(_watched(projector)):
+                sync(projector)
         if depsgraph is not None:
             shadows.on_depsgraph_update(depsgraph)
     finally:
@@ -789,6 +822,7 @@ def remove_projector(projector):
 
 @persistent
 def _on_load(*args):
+    registry.invalidate()
     # Upgrade groups made by older versions, then sync.
     for projector in all_projectors():
         try:

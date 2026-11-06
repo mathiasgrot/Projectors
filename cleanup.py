@@ -76,6 +76,8 @@ def _remove_object(obj):
 def _clean():
     global _scheduled
     _scheduled = False
+    from . import registry
+    registry.invalidate()
     objs, groups = _orphans()
     for g in groups:
         try:
