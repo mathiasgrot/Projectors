@@ -7,7 +7,38 @@ Simple projector creation and modification for [Blender](https://www.blender.org
 * Easy creation and modification of physically-based projectors.
 * Real-world projector settings like [throw ratio](https://en.wikipedia.org/wiki/Throw_(projector)), [resolution](https://en.wikipedia.org/wiki/Computer_display_standard) and [lens shift](https://www.projectorcentral.com/Understanding-Lens-Offset-and-Lens-Shift.htm).
 * Project test textures or your own content like images and videos.
-* Preview the projections in Cycles render mode (Eevee will be supported when the needed functionality is implemented).
+* Preview the projections in Cycles and EEVEE (including Material Preview in the viewport).
+
+### EEVEE
+EEVEE ignores node trees on lights, so in EEVEE the projection is done in the materials of the receiving objects:
+
+1. Select the objects to project onto, then the projector.
+2. In the *Projector* panel under *EEVEE & Material Preview*, click **Add Selected** (or **Add All** for every visible object).
+
+The addon adds the projector to those materials through an EEVEE-only Material Output, so Cycles renders are unchanged. Brightness, falloff, throw ratio, lens shift, resolution, checker color, custom images/movies and the pixel grid follow the projector settings. Moving, animating or hiding the projector (render visibility) updates EEVEE live. Use **Remove Selected/All** to restore the original materials. Deleting a projector cleans up after itself.
+
+### Duplicating
+Shift+D (or copy/paste) a projector and the copy becomes a complete, independent projector with the same settings, custom image, body and EEVEE receivers. The **Duplicate** button next to New/Remove does the same and places the copy beside the original.
+
+### Reinit
+If a projector breaks (node trees edited by hand, its light deleted, its node removed from a material), select it and click **Reinit**. It rebuilds the projector from its settings and keeps its custom image, body and EEVEE receivers.
+
+### Deleting
+Delete a projector with the Remove button, X or the Outliner: its spot light, body, EEVEE setup and shadow map are removed with it, and receiving materials are restored.
+
+### Projector body
+Tick **Show Body** to add a box for the projector housing behind the lens, with its **Width**, **Height** and **Depth**. **Lens Offset** moves the lens away from the centre of the front face, for projectors whose lens is off-centre. Clicking the body selects its projector. The body renders, blocks other projectors' beams (Cycles, and EEVEE with shadows), and never blocks its own projector.
+
+#### Shadows
+Tick **Shadows** to let objects block the projection. The addon ray-casts the scene from the projector into a depth map (shadow mapping, done offline) and the projection only lands where nothing is in front. Every visible object casts shadows, receiver or not, except objects with *Shadow* ray visibility turned off or hidden from render.
+* **Auto Update** re-bakes shortly after objects stop moving. A 1024 map typically takes well under a second.
+* **Resolution** sets how sharp the shadow edges are. **Bias** fixes speckled self-shadowing on surfaces the beam hits at a steep angle.
+* The map is saved in the .blend.
+
+Limitations in EEVEE:
+* Shadows come from the last bake. Rendering an animation where the projector or set moves uses the shadows of the frame that was baked.
+* Only diffuse light (no projected highlights). The surface color comes from the Base Color of a Principled BSDF or the Color of a Diffuse BSDF; other shaders get a light grey.
+* Materials are shared, so every object using a receiving material gets the projection.
 
 ## Projectors Add-on in Action
 

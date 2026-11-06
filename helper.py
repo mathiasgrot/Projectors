@@ -44,6 +44,17 @@ def get_projector(context):
         return None
 
 
+def get_spot(projector):
+    """ The spot light that does the projection. A projector can have other
+    children too (like its body), so don't rely on children[0]. """
+    if projector is None:
+        return None
+    for child in projector.children:
+        if child.type == 'LIGHT':
+            return child
+    return None
+
+
 def auto_offset():
     offset = 0
 
