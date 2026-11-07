@@ -14,14 +14,8 @@ EEVEE ignores node trees on lights, so in EEVEE the projection is done in the ma
 
 The addon adds the projector to those materials through an EEVEE-only Material Output, so Cycles renders are unchanged. Deleting a projector cleans up after itself.
 
-### Projector body
-Tick **Show Body** to add a box for the projector housing behind the lens, with its **Width**, **Height** and **Depth**. **Lens Offset** moves the lens away from the centre of the front face, for projectors whose lens is off-centre. Clicking the body selects its projector. The body renders, blocks other projectors' beams (Cycles, and EEVEE with shadows), and never blocks its own projector.
-
 #### Shadows
 Tick **Shadows** to let objects block the projection. The addon ray-casts the scene from the projector into a depth map (shadow mapping, done offline) and the projection only lands where nothing is in front. Every visible object casts shadows.
-* **Auto Update** re-bakes shortly after objects stop moving. A 1024 map typically takes well under a second.
-* **Resolution** sets how sharp the shadow edges are. **Bias** fixes speckled self-shadowing on surfaces the beam hits at a steep angle.
-* The map is saved in the .blend.
 
 ## Projectors Add-on in Action
 
